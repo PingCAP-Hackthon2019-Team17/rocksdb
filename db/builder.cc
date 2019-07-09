@@ -328,11 +328,13 @@ Status BuildPartTable(
           current_guard = Slice();
         }
 
-         // Split sst by guard when sst reach specified size.
+        // Split sst by guard when sst reach specified size.
+        /*
         uint64_t split_size = ioptions.level0_split_size > 0 ? ioptions.level0_split_size : 32*1024*1024;
         if (builder->FileSize() >= split_size) {
           break;
         }
+        */
       }
 
        builder->Add(key, value);
