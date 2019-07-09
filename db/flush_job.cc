@@ -353,19 +353,59 @@ Status FlushJob::WriteLevel0Table() {
       uint64_t oldest_key_time =
           mems_.front()->ApproximateOldestKeyTime();
 
-      s = BuildTable(
-          dbname_, db_options_.env, *cfd_->ioptions(), mutable_cf_options_,
-          env_options_, cfd_->table_cache(), iter.get(),
-          std::move(range_del_iters), &meta_, cfd_->internal_comparator(),
-          cfd_->int_tbl_prop_collector_factories(), cfd_->GetID(),
-          cfd_->GetName(), existing_snapshots_,
-          earliest_write_conflict_snapshot_, snapshot_checker_,
-          output_compression_, cfd_->ioptions()->compression_opts,
-          mutable_cf_options_.paranoid_file_checks, cfd_->internal_stats(),
-          TableFileCreationReason::kFlush, event_logger_, job_context_->job_id,
-          Env::IO_HIGH, &table_properties_, 0 /* level */, current_time,
-          oldest_key_time, write_hint);
-      LogFlush(db_options_.info_log);
+      MergeHelper merge(db_options_.env, cfd_->internal_comparator().user_comparator(),
+                     cfd_->ioptions()->merge_operator, nullptr, cfd_->ioptions()->info_log,
+                     true /* internal key corruption is not ok */,
+                     existing_snapshots_.empty() ? 0 : existing_snapshots_.back(),
+                     snapshot_checker_);
+
+      std::unique_ptr<CompactionRangeDelAggregator> range_del_agg(
+      new CompactionRangeDelAggregator(&cfd_->internal_comparator(), existing_snapshots_));
+      for (auto& range_del_iter : range_del_iters) {
+        range_del_agg->AddTombstones(std::move(range_del_iter));
+      }
+      iter.get()->SeekToFirst();
+      CompactionIterator c_iter(
+          iter.get(), cfd_->internal_comparator().user_comparator(), &merge, kMaxSequenceNumber,
+          &existing_snapshots_, earliest_write_conflict_snapshot_, snapshot_checker_, db_options_.env,
+          ShouldReportDetailedTime(db_options_.env, cfd_->ioptions()->statistics),
+          true /* internal key corruption is not ok */, range_del_agg.get());
+      c_iter.SeekToFirst();
+
+      std::vector<std::string> guards;
+      if (cfd_->ioptions()->compaction_guard != nullptr) {
+        // TODO(jinpeng): use the range of this flush job.
+        guards = cfd_->ioptions()->compaction_guard->GetGuardsInRange(nullptr, nullptr);
+      }
+      Slice current_guard;
+      int current_guard_idx = -1;
+      bool guard_end = false;
+
+       while (c_iter.Valid()) {
+        FileMetaData& fmeta = current_meta();
+        // path 0 for level 0 file.
+        fmeta.fd = FileDescriptor(versions_->NewFileNumber(), 0, 0);
+        s = BuildPartTable(
+            dbname_, db_options_.env, *cfd_->ioptions(), mutable_cf_options_,
+            env_options_, cfd_->table_cache(), c_iter, &fmeta, cfd_->internal_comparator(),
+            cfd_->int_tbl_prop_collector_factories(), cfd_->GetID(),
+            cfd_->GetName(),
+            output_compression_, cfd_->ioptions()->compression_opts,
+            mutable_cf_options_.paranoid_file_checks, cfd_->internal_stats(),
+            TableFileCreationReason::kFlush, guards, current_guard, current_guard_idx, guard_end,
+            event_logger_, job_context_->job_id,
+            Env::IO_HIGH, &table_properties_, 0 /* level */, current_time,
+            oldest_key_time, write_hint);
+        LogFlush(db_options_.info_log);
+
+         if (!s.ok()) {
+          break;
+        }
+
+         if (c_iter.Valid()) {
+          move_to_next_file_meta();
+        }
+      }
     }
     ROCKS_LOG_INFO(db_options_.info_log,
                    "[%s] [JOB %d] Level-0 flush table #%" PRIu64 ": %" PRIu64
@@ -386,26 +426,30 @@ Status FlushJob::WriteLevel0Table() {
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
-  if (s.ok() && meta_.fd.GetFileSize() > 0) {
+  if (s.ok()) {
     // if we have more than 1 background thread, then we cannot
     // insert files directly into higher levels because some other
     // threads could be concurrently producing compacted files for
     // that key range.
     // Add file to L0
-    edit_->AddFile(0 /* level */, meta_.fd.GetNumber(), meta_.fd.GetPathId(),
-                   meta_.fd.GetFileSize(), meta_.smallest, meta_.largest,
-                   meta_.fd.smallest_seqno, meta_.fd.largest_seqno,
-                   meta_.marked_for_compaction);
+    for (auto it = metas_.begin(); it != metas_.end(); ++it) {
+      if (it->fd.GetFileSize() > 0) {
+        edit_->AddFile(0 /* level */, it->fd.GetNumber(), it->fd.GetPathId(),
+                      it->fd.GetFileSize(), it->smallest, it->largest,
+                      it->fd.smallest_seqno, it->fd.largest_seqno,
+                      it->marked_for_compaction);
+      }
+    }
   }
 
   // Note that here we treat flush as level 0 compaction in internal stats
   InternalStats::CompactionStats stats(CompactionReason::kFlush, 1);
   stats.micros = db_options_.env->NowMicros() - start_micros;
-  stats.bytes_written = meta_.fd.GetFileSize();
+  stats.bytes_written = total_flush_bytes();
   MeasureTime(stats_, FLUSH_TIME, stats.micros);
   cfd_->internal_stats()->AddCompactionStats(0 /* level */, stats);
   cfd_->internal_stats()->AddCFStats(InternalStats::BYTES_FLUSHED,
-                                     meta_.fd.GetFileSize());
+                                     total_flush_bytes());
   RecordFlushIOStats();
   return s;
 }

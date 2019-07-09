@@ -132,11 +132,31 @@ class FlushJob {
   const bool write_manifest_;
 
   // Variables below are set by PickMemTable():
+  std::vector<FileMetaData> metas_;
   FileMetaData meta_;
   autovector<MemTable*> mems_;
   VersionEdit* edit_;
   Version* base_;
   bool pick_memtable_called;
+
+  FileMetaData& current_meta() {
+    if (metas_.empty()) {
+      metas_.emplace_back();
+    }
+    return metas_.back();
+  }
+
+   void move_to_next_file_meta() {
+    metas_.emplace_back();
+  }
+
+   uint64_t total_flush_bytes() {
+    uint64_t total = 0;
+    for (auto it = metas_.begin(); it != metas_.end(); ++it) {
+      total += it->fd.GetFileSize();
+    }
+    return total;
+  }
 };
 
 }  // namespace rocksdb
