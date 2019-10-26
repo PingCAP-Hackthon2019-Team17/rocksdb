@@ -43,6 +43,11 @@
 
 namespace rocksdb {
 
+struct UringData {
+  uint64_t size;
+  uint64_t ts;
+};
+
 // A wrapper for fadvise, if the platform doesn't support fadvise,
 // it will simply return 0.
 int Fadvise(int fd, off_t offset, size_t len, int advice) {
@@ -1034,10 +1039,13 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   if (sqe == nullptr) {
     return Status::IOError("async append: get sqe");
   }
-  void* buffer = malloc(data.size());
-  memcpy(buffer, data.data(), data.size());
+  void* buffer = malloc(sizeof(UringData) + data.size());
+  UringData* uring_data = reinterpret_cast<UringData*>(buffer);
+  uring_data->size = data.data();
+  uring_data->ts = 0;
+  memcpy(buffer + sizeof(UringData), data.data(), data.size());
   struct iovec iov[1];
-  iov[0].iov_base = buffer;
+  iov[0].iov_base = buffer + sizeof(UringData);
   iov[0].iov_len = data.size();
   io_uring_prep_writev(sqe, fd_, iov, 1, filesize_);
   sqe->user_data = reinterpret_cast<uint64_t>(buffer);
