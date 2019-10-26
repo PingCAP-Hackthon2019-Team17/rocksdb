@@ -1068,10 +1068,6 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   uring_queue_len_++;
 
   filesize_ += nbytes;
-  s = WaitQueue(0);
-  if (!s.ok()) {
-    return s;
-  }
   return Status::OK();
 }
 
