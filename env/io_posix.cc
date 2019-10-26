@@ -1019,6 +1019,7 @@ Status PosixWritableFile::WaitQueue(int max_len) {
       byte_cnt += uring_data->size;
       free(buffer);
     }
+    printf("res %d\n", cqe->res);
     if (cqe->res < 0) {
       return Status::IOError("wait queue: res " + ToString(cqe->res) + " " + ToString(cqe->user_data));
     }
@@ -1055,6 +1056,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   uring_data->size = data.size();
   uring_data->ts = 0;
   void* data_buf = reinterpret_cast<void*>(reinterpret_cast<char*>(buffer) + sizeof(UringData));
+  printf("buf %p %p\n", buffer, data_buf);
   memcpy(data_buf, data.data(), data.size());
   struct iovec iov[1];
   iov[0].iov_base = data_buf;
