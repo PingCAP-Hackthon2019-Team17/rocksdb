@@ -1049,17 +1049,19 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   if (sqe == nullptr) {
     return Status::IOError("async append: get sqe");
   }
-  void* buffer = malloc(sizeof(UringData) + data.size() + 100);
+  void* buffer = malloc(sizeof(UringData) + sizeof(struct iovec) + data.size() + 100);
   UringData* uring_data = reinterpret_cast<UringData*>(buffer);
   uring_data->size = data.size();
   uring_data->ts = 0;
-  void* data_buf = reinterpret_cast<void*>(reinterpret_cast<char*>(buffer) + sizeof(UringData));
+  struct iovec *iov = reinterpret_cast<struct iovec*>(
+      reinterpret_cast<char*>(buffer) + sizeof(UringData));
+  iov->iov_base = data_buf;
+  iov->iov_len = data.size();
+  void* data_buf = reinterpret_cast<void*>(
+      reinterpret_cast<char*>(buffer) + sizeof(UringData) + sizeof(struct iovec));
   printf("accumulated append %d %lu %p %p\n", fd_, byte_cnt, buffer, data_buf);
   memcpy(data_buf, data.data(), data.size());
-  struct iovec iov;
-  iov.iov_base = data_buf;
-  iov.iov_len = data.size();
-  io_uring_prep_writev(sqe, fd_, &iov, 1, filesize_);
+  io_uring_prep_writev(sqe, fd_, iov, 1, filesize_);
   sqe->user_data = reinterpret_cast<uint64_t>(buffer);
   io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
   int ret = io_uring_submit(&uring_);
