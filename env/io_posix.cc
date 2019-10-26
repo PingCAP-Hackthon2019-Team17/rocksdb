@@ -966,6 +966,7 @@ PosixWritableFile::~PosixWritableFile() {
   if (fd_ >= 0) {
     PosixWritableFile::Close();
   }
+  printf("uring exit\n");
   io_uring_queue_exit(&uring_);
 }
 
