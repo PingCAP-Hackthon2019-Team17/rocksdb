@@ -1175,7 +1175,8 @@ Status PosixWritableFile::AsyncSync() {
   if (sqe == nullptr) {
     return Status::IOError("sync: get sqe");
   }
-  io_uring_prep_fsync(sqe, fd_, IORING_FSYNC_DATASYNC);
+  // io_uring_prep_fsync(sqe, fd_, IORING_FSYNC_DATASYNC);
+  io_uring_prep_fsync(sqe, fd_, 0);
   sqe->user_data = 0;
   io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
   int ret = io_uring_submit(&uring_);
