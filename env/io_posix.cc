@@ -1046,7 +1046,6 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
 
   static size_t byte_cnt = 0;
   byte_cnt += nbytes;
-  printf("accumulated append %d %lu\n", fd_, byte_cnt);
   struct io_uring_sqe* sqe = io_uring_get_sqe(&uring_);
   if (sqe == nullptr) {
     return Status::IOError("async append: get sqe");
@@ -1056,7 +1055,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   uring_data->size = data.size();
   uring_data->ts = 0;
   void* data_buf = reinterpret_cast<void*>(reinterpret_cast<char*>(buffer) + sizeof(UringData));
-  printf("buf %p %p\n", buffer, data_buf);
+  printf("accumulated append %d %lu %p %p\n", fd_, byte_cnt, buffer, data_buf);
   memcpy(data_buf, data.data(), data.size());
   struct iovec iov;
   iov.iov_base = data_buf;
