@@ -428,7 +428,7 @@ Status WritableFileWriter::Flush(bool async) {
 }
 
 Status WritableFileWriter::Sync(bool use_fsync, bool async) {
-  Status s = Flush();
+  Status s = Flush(async);
   if (!s.ok()) {
     return s;
   }
