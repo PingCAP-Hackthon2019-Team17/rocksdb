@@ -1240,6 +1240,7 @@ Status PosixWritableFile::InvalidateCache(size_t offset, size_t length) {
 
 #ifdef ROCKSDB_FALLOCATE_PRESENT
 Status PosixWritableFile::Allocate(uint64_t offset, uint64_t len) {
+  printf("allocate %d %lu %lu\n", fd_, offset, len);
   assert(offset <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
   assert(len <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
   TEST_KILL_RANDOM("PosixWritableFile::Allocate:0", rocksdb_kill_odds);
