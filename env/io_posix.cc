@@ -1110,6 +1110,7 @@ Status PosixWritableFile::Close() {
     // NOTE(ljin): we probably don't want to surface failure as an IOError,
     // but it will be nice to log these errors.
     int dummy __attribute__((__unused__));
+    printf("ftruncate %d %lu\n", fd_, filesize_);
     dummy = ftruncate(fd_, filesize_);
 #if defined(ROCKSDB_FALLOCATE_PRESENT) && defined(FALLOC_FL_PUNCH_HOLE) && \
     !defined(TRAVIS)
@@ -1139,6 +1140,8 @@ Status PosixWritableFile::Close() {
             file_stats.st_blocks / (file_stats.st_blksize / 512)) {
       IOSTATS_TIMER_GUARD(allocate_nanos);
       if (allow_fallocate_) {
+        printf("fallocate %d %lu %lu\n", fd_, filesize_,
+               block_size * last_allocated_block - filesize_);
         fallocate(fd_, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, filesize_,
                   block_size * last_allocated_block - filesize_);
       }
