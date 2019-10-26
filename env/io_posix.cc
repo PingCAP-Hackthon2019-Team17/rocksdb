@@ -971,6 +971,7 @@ PosixWritableFile::~PosixWritableFile() {
 
 Status PosixWritableFile::Append(const Slice& data) {
   printf("sync append %d %lu\n", fd_, data.size());
+  abort();
   if (use_direct_io()) {
     assert(IsSectorAligned(data.size(), GetRequiredBufferAlignment()));
     assert(IsSectorAligned(data.data(), GetRequiredBufferAlignment()));
