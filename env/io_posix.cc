@@ -998,6 +998,7 @@ Status PosixWritableFile::WaitQueue(int max_len) {
     uring_queue_len_ -= static_cast<int>(got);
   }
   */
+  static int sync_cnt = 0;
   while (uring_queue_len_ > max_len) {
     struct io_uring_cqe* cqe;
     int ret = io_uring_wait_cqe(&uring_, &cqe);
@@ -1007,6 +1008,12 @@ Status PosixWritableFile::WaitQueue(int max_len) {
     if (cqe->user_data != 0) {
       void* buffer = reinterpret_cast<void*>(cqe->user_data);
       free(buffer);
+    } else {
+      sync_cnt++;
+    }
+    if (sync_cnt >= 1000) {
+      fprintf(stderr, "sync 1000\n");
+      sync_cnt = 0;
     }
     io_uring_cqe_seen(&uring_, cqe);
     uring_queue_len_--;
