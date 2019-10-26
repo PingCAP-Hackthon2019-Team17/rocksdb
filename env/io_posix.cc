@@ -1020,7 +1020,7 @@ Status PosixWritableFile::WaitQueue(int max_len) {
       free(buffer);
     }
     if (cqe->res < 0) {
-      return Status::IOError("wait queue: res");
+      return Status::IOError("wait queue: res %d %lu", cqe->res, cqe->user_data);
     }
     seen_cnt += static_cast<size_t>(cqe->res);
     io_uring_cqe_seen(&uring_, cqe);
