@@ -970,6 +970,7 @@ PosixWritableFile::~PosixWritableFile() {
 }
 
 Status PosixWritableFile::Append(const Slice& data) {
+  printf("sync append %d %lu\n", fd_, data.size());
   if (use_direct_io()) {
     assert(IsSectorAligned(data.size(), GetRequiredBufferAlignment()));
     assert(IsSectorAligned(data.data(), GetRequiredBufferAlignment()));
@@ -1067,6 +1068,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
 
 
 Status PosixWritableFile::PositionedAppend(const Slice& data, uint64_t offset) {
+  printf("position append %d %lu\n", fd_, data.size());
   if (use_direct_io()) {
     assert(IsSectorAligned(offset, GetRequiredBufferAlignment()));
     assert(IsSectorAligned(data.size(), GetRequiredBufferAlignment()));
@@ -1084,6 +1086,7 @@ Status PosixWritableFile::PositionedAppend(const Slice& data, uint64_t offset) {
 }
 
 Status PosixWritableFile::Truncate(uint64_t size) {
+  printf("truncate %d %lu\n", fd_, size);
   Status s;
   int r = ftruncate(fd_, size);
   if (r < 0) {
