@@ -1002,7 +1002,10 @@ Status PosixWritableFile::WaitQueue(int max_len) {
     struct io_uring_cqe* cqe;
     int ret = io_uring_wait_cqe(&uring_, &cqe);
     if (ret < 0) {
-      return Status::IOError("async append: wait cqe");
+      return Status::IOError("wait queue: wait cqe");
+    }
+    if (cqe->res < 0) {
+      return Status::IOError("wait queue: res = " + ToString(cqe->res));
     }
     if (cqe->user_data != 0) {
       void* buffer = reinterpret_cast<void*>(cqe->user_data);
