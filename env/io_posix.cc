@@ -1045,7 +1045,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   }
   void* buffer = malloc(sizeof(UringData) + data.size());
   UringData* uring_data = reinterpret_cast<UringData*>(buffer);
-  uring_data->size = data.data();
+  uring_data->size = data.size();
   uring_data->ts = 0;
   void* data_buf = reinterpret_cast<void*>(reinterpret_cast<char*>(buffer) + sizeof(UringData));
   memcpy(data_buf, data.data(), data.size());
