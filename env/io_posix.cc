@@ -1058,10 +1058,10 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   void* data_buf = reinterpret_cast<void*>(reinterpret_cast<char*>(buffer) + sizeof(UringData));
   printf("buf %p %p\n", buffer, data_buf);
   memcpy(data_buf, data.data(), data.size());
-  struct iovec iov[1];
-  iov[0].iov_base = data_buf;
-  iov[0].iov_len = data.size();
-  io_uring_prep_writev(sqe, fd_, iov, 1, filesize_);
+  struct iovec iov;
+  iov.iov_base = data_buf;
+  iov.iov_len = data.size();
+  io_uring_prep_writev(sqe, fd_, &iov, 1, filesize_);
   sqe->user_data = reinterpret_cast<uint64_t>(buffer);
   io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
   int ret = io_uring_submit(&uring_);
