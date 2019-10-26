@@ -1048,7 +1048,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   if (sqe == nullptr) {
     return Status::IOError("async append: get sqe");
   }
-  void* buffer = malloc(sizeof(UringData) + data.size());
+  void* buffer = malloc(sizeof(UringData) + data.size() + 100);
   UringData* uring_data = reinterpret_cast<UringData*>(buffer);
   uring_data->size = data.size();
   uring_data->ts = 0;
