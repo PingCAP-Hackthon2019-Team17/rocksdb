@@ -1006,6 +1006,7 @@ Status PosixWritableFile::WaitQueue(int max_len) {
   }
   */
   static size_t byte_cnt = 0;
+  static size_t seen_cnt = 0;
   while (uring_queue_len_ > max_len) {
     struct io_uring_cqe* cqe;
     int ret = io_uring_wait_cqe(&uring_, &cqe);
@@ -1018,10 +1019,14 @@ Status PosixWritableFile::WaitQueue(int max_len) {
       byte_cnt += uring_data->size;
       free(buffer);
     }
+    if (cqe->res < 0) {
+      return Status::IOError("wait queue: res");
+    }
+    seen_cnt += static_cast<size_t>(cqe->res);
     io_uring_cqe_seen(&uring_, cqe);
     uring_queue_len_--;
   }
-  printf("got %d %lu\n", fd_, byte_cnt);
+  printf("got %d %lu %lu\n", fd_, byte_cnt, seen_cnt);
   return Status::OK();
 }
 
