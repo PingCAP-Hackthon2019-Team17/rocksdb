@@ -1029,7 +1029,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
 
   static size_t byte_cnt = 0;
   byte_cnt += nbytes;
-  printf("accumulated append %lu\n", byte_cnt);
+  printf("accumulated append %d %lu\n", fd_, byte_cnt);
   struct io_uring_sqe* sqe = io_uring_get_sqe(&uring_);
   if (sqe == nullptr) {
     return Status::IOError("async append: get sqe");
