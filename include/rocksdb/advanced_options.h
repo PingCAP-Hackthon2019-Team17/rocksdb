@@ -629,7 +629,7 @@ struct AdvancedColumnFamilyOptions {
   // Default: false
   //
   // Dynamically changeable through SetOptions() API
-  bool report_bg_io_stats = false;
+  bool report_bg_io_stats = true;
 
   // Files older than TTL will go through the compaction process.
   // Supported in Level and FIFO compaction.
