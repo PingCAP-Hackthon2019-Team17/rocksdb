@@ -954,12 +954,14 @@ PosixWritableFile::PosixWritableFile(const std::string& fname, int fd,
   sync_file_range_supported_ = IsSyncFileRangeSupported(fd_);
 #endif  // ROCKSDB_RANGESYNC_PRESENT
   assert(!options.use_mmap_writes);
+  io_uring_queue_init(kIoUringDepth, &uring_, 0);
 }
 
 PosixWritableFile::~PosixWritableFile() {
   if (fd_ >= 0) {
     PosixWritableFile::Close();
   }
+  io_uring_queue_exit(&uring_);
 }
 
 Status PosixWritableFile::Append(const Slice& data) {
@@ -977,6 +979,81 @@ Status PosixWritableFile::Append(const Slice& data) {
   filesize_ += nbytes;
   return Status::OK();
 }
+
+Status PosixWritableFile::WaitQueue(int max_len) {
+  if (uring_queue_len_ <= max_len) {
+    return Status::OK();
+  }
+  /*
+  struct io_uring_cqe* cqes[100];
+  unsigned got = io_uring_peek_batch_cqe(&uring_, cqes, 100);
+  if (got > 0) {
+    for (unsigned i = 0; i < got; i++) {
+      if (cqes[i]->user_data != 0) {
+        void* buf = reinterpret_cast<void*>(cqes[i]->user_data);
+        free(buf);
+      }
+      io_uring_cqe_seen(&uring_, cqes[i]);
+    }
+    uring_queue_len_ -= static_cast<int>(got);
+  }
+  */
+  while (uring_queue_len_ > max_len) {
+    struct io_uring_cqe* cqe;
+    int ret = io_uring_wait_cqe(&uring_, &cqe);
+    if (ret < 0) {
+      return Status::IOError("wait queue: wait cqe");
+    }
+    if (cqe->res < 0) {
+      return Status::IOError("wait queue: res = " + ToString(cqe->res));
+    }
+    if (cqe->user_data != 0) {
+      void* buffer = reinterpret_cast<void*>(cqe->user_data);
+      free(buffer);
+    }
+    io_uring_cqe_seen(&uring_, cqe);
+    uring_queue_len_--;
+  }
+  return Status::OK();
+}
+
+Status PosixWritableFile::AsyncAppend(const Slice& data) {
+  if (use_direct_io()) {
+    assert(IsSectorAligned(data.size(), GetRequiredBufferAlignment()));
+    assert(IsSectorAligned(data.data(), GetRequiredBufferAlignment()));
+  }
+  // const char* src = data.data();
+  size_t nbytes = data.size();
+
+  Status s = WaitQueue(200);
+  if (!s.ok()) {
+    return s;
+  }
+
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&uring_);
+  if (sqe == nullptr) {
+    return Status::IOError("async append: get sqe");
+  }
+  void* buffer = malloc(sizeof(struct iovec) + data.size());
+  void* data_buf = reinterpret_cast<void*>(
+      reinterpret_cast<char*>(buffer) + sizeof(struct iovec));
+  struct iovec *iov = reinterpret_cast<struct iovec*>(buffer);
+  iov->iov_base = data_buf;
+  iov->iov_len = data.size();
+  memcpy(data_buf, data.data(), data.size());
+  io_uring_prep_writev(sqe, fd_, iov, 1, filesize_);
+  sqe->user_data = reinterpret_cast<uint64_t>(buffer);
+  io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
+  int ret = io_uring_submit(&uring_);
+  if (ret <= 0) {
+    return Status::IOError("async append: submit");
+  }
+  uring_queue_len_++;
+
+  filesize_ += nbytes;
+  return Status::OK();
+}
+
 
 Status PosixWritableFile::PositionedAppend(const Slice& data, uint64_t offset) {
   if (use_direct_io()) {
@@ -1071,6 +1148,51 @@ Status PosixWritableFile::Sync() {
   return Status::OK();
 }
 
+Status PosixWritableFile::AsyncSync() {
+  Status s = WaitQueue(200);
+  if (!s.ok()) {
+    return s;
+  }
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&uring_);
+  if (sqe == nullptr) {
+    return Status::IOError("sync: get sqe");
+  }
+  io_uring_prep_fsync(sqe, fd_, IORING_FSYNC_DATASYNC);
+  sqe->user_data = 0;
+  io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
+  int ret = io_uring_submit(&uring_);
+  if (ret <= 0) {
+    return Status::IOError("sync: submit");
+  }
+  uring_queue_len_++;
+  return Status::OK();
+}
+
+Status PosixWritableFile::AsyncRangeSync(uint64_t offset, uint64_t nbytes) {
+  Status s = WaitQueue(200);
+  if (!s.ok()) {
+    return s;
+  }
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&uring_);
+  if (sqe == nullptr) {
+    return Status::IOError("sync: get sqe");
+  }
+  io_uring_prep_rw(IORING_OP_SYNC_FILE_RANGE, sqe, fd_, NULL, offset, nbytes);
+  sqe->sync_range_flags = SYNC_FILE_RANGE_WRITE;
+  sqe->user_data = 0;
+  io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
+  int ret = io_uring_submit(&uring_);
+  if (ret <= 0) {
+    return Status::IOError("sync: submit");
+  }
+  uring_queue_len_++;
+  return Status::OK();
+}
+
+Status PosixWritableFile::WaitAsync() {
+  return WaitQueue(0);
+}
+
 Status PosixWritableFile::Fsync() {
   if (fsync(fd_) < 0) {
     return IOError("While fsync", filename_, errno);
@@ -1141,6 +1263,8 @@ Status PosixWritableFile::Allocate(uint64_t offset, uint64_t len) {
 #endif
 
 Status PosixWritableFile::RangeSync(uint64_t offset, uint64_t nbytes) {
+  return AsyncRangeSync(offset, nbytes);
+  /*
 #ifdef ROCKSDB_RANGESYNC_PRESENT
   assert(offset <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
   assert(nbytes <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
@@ -1165,6 +1289,7 @@ Status PosixWritableFile::RangeSync(uint64_t offset, uint64_t nbytes) {
   }
 #endif  // ROCKSDB_RANGESYNC_PRESENT
   return WritableFile::RangeSync(offset, nbytes);
+  */
 }
 
 #ifdef OS_LINUX

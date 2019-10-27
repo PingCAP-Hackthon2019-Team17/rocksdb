@@ -409,6 +409,12 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
   if (need_log_sync) {
     mutex_.Lock();
+    for (auto& log : logs_) {
+      status = log.writer->file()->WaitAsync();
+      if (!status.ok()) {
+        break;
+      }
+    }
     MarkLogsSynced(logfile_number_, need_log_dir_sync, status);
     mutex_.Unlock();
     // Requesting sync with two_write_queues_ is expected to be very rare. We
@@ -1016,7 +1022,7 @@ Status DBImpl::WriteToWAL(const WriteThread::WriteGroup& write_group,
     //  - as long as other threads don't modify it, it's safe to read
     //    from std::deque from multiple threads concurrently.
     for (auto& log : logs_) {
-      status = log.writer->file()->Sync(immutable_db_options_.use_fsync);
+      status = log.writer->file()->Sync(immutable_db_options_.use_fsync, true/*async*/);
       if (!status.ok()) {
         break;
       }

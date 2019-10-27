@@ -274,15 +274,17 @@ class WritableFileWriter {
 
   std::string file_name() const { return file_name_; }
 
-  Status Append(const Slice& data);
+  Status Append(const Slice& data, bool async = false);
 
-  Status Pad(const size_t pad_bytes);
+  Status Pad(const size_t pad_bytes, bool async = false);
 
-  Status Flush();
+  Status Flush(bool async = false);
 
   Status Close();
 
-  Status Sync(bool use_fsync);
+  Status Sync(bool use_fsync, bool async = false);
+
+  Status WaitAsync();
 
   // Sync only the data that was already Flush()ed. Safe to call concurrently
   // with Append() and Flush(). If !writable_file_->IsSyncThreadSafe(),
@@ -308,9 +310,9 @@ class WritableFileWriter {
   Status WriteDirect();
 #endif  // !ROCKSDB_LITE
   // Normal write
-  Status WriteBuffered(const char* data, size_t size);
+  Status WriteBuffered(const char* data, size_t size, bool async = false);
   Status RangeSync(uint64_t offset, uint64_t nbytes);
-  Status SyncInternal(bool use_fsync);
+  Status SyncInternal(bool use_fsync, bool async = false);
 };
 
 // FilePrefetchBuffer is a smart buffer to store and read data from a file.

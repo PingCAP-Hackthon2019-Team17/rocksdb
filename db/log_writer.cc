@@ -29,6 +29,7 @@ Writer::Writer(std::unique_ptr<WritableFileWriter>&& dest, uint64_t log_number,
     char t = static_cast<char>(i);
     type_crc_[i] = crc32c::Value(&t, 1);
   }
+  is_manifest_ = dest_->file_name().find("MANIFEST") != std::string::npos;
 }
 
 Writer::~Writer() {
@@ -71,7 +72,7 @@ Status Writer::AddRecord(const Slice& slice) {
         // kRecyclableHeaderSize being <= 11)
         assert(header_size <= 11);
         s = dest_->Append(Slice("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
-                                static_cast<size_t>(leftover)));
+                                static_cast<size_t>(leftover)), !is_manifest_/*async*/);
         if (!s.ok()) {
           break;
         }
@@ -105,7 +106,7 @@ Status Writer::AddRecord(const Slice& slice) {
 
   if (s.ok()) {
     if (!manual_flush_) {
-      s = dest_->Flush();
+      s = dest_->Flush(!is_manifest_/*async*/);
     }
   }
 
@@ -150,9 +151,9 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload
-  Status s = dest_->Append(Slice(buf, header_size));
+  Status s = dest_->Append(Slice(buf, header_size), !is_manifest_/*async*/);
   if (s.ok()) {
-    s = dest_->Append(Slice(ptr, n));
+    s = dest_->Append(Slice(ptr, n), !is_manifest_/*async*/);
   }
   block_offset_ += header_size + n;
   return s;

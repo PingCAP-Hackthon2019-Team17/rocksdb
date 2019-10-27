@@ -753,6 +753,10 @@ class WritableFile {
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;  // sync data
 
+  virtual Status AsyncAppend(const Slice&) { return Status::NotSupported(); }
+  virtual Status AsyncSync() { return Status::NotSupported(); }
+  virtual Status WaitAsync() { return Status::NotSupported(); }
+
   /*
    * Sync data and/or metadata as well.
    * By default, sync only data.

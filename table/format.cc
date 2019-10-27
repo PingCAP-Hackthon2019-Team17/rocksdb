@@ -309,10 +309,13 @@ Status ReadFooterFromFile(RandomAccessFileReader* file,
   // Check that we actually read the whole footer from the file. It may be
   // that size isn't correct.
   if (footer_input.size() < Footer::kMinEncodedLength) {
+    abort();
+    /*
     return Status::Corruption("file is too short (" + ToString(file_size) +
                               " bytes) to be an "
                               "sstable" +
                               file->file_name());
+    */
   }
 
   s = footer->DecodeFrom(&footer_input);

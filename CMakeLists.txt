@@ -470,6 +470,8 @@ if(HAVE_PTHREAD_MUTEX_ADAPTIVE_NP)
   add_definitions(-DROCKSDB_PTHREAD_ADAPTIVE_MUTEX)
 endif()
 
+add_definitions(-DROCKSDB_IOURING_PRESENT)
+
 include(CheckCXXSymbolExists)
 check_cxx_symbol_exists(malloc_usable_size malloc.h HAVE_MALLOC_USABLE_SIZE)
 if(HAVE_MALLOC_USABLE_SIZE)
