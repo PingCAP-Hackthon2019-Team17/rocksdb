@@ -1044,7 +1044,7 @@ Status PosixWritableFile::AsyncAppend(const Slice& data) {
   memcpy(data_buf, data.data(), data.size());
   io_uring_prep_writev(sqe, fd_, iov, 1, filesize_);
   sqe->user_data = reinterpret_cast<uint64_t>(buffer);
-  io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
+  // io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
   int ret = io_uring_submit(&uring_);
   if (ret <= 0) {
     return Status::IOError("async append: submit");
@@ -1160,7 +1160,7 @@ Status PosixWritableFile::AsyncSync() {
   }
   io_uring_prep_fsync(sqe, fd_, IORING_FSYNC_DATASYNC);
   sqe->user_data = 0;
-  io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
+  // io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
   int ret = io_uring_submit(&uring_);
   if (ret <= 0) {
     return Status::IOError("sync: submit");
