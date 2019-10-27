@@ -1168,6 +1168,27 @@ Status PosixWritableFile::AsyncSync() {
   return Status::OK();
 }
 
+Status PosixWritableFile::AsyncRangeSync(uint64_t offset, uint64_t nbytes) {
+  Status s = WaitQueue(200);
+  if (!s.ok()) {
+    return s;
+  }
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&uring_);
+  if (sqe == nullptr) {
+    return Status::IOError("sync: get sqe");
+  }
+  io_uring_prep_rw(IORING_OP_SYNC_FILE_RANGE, sqe, fd_, NULL, offset, nbytes);
+  sqe->sync_range_flags = SYNC_FILE_RANGE_WRITE;
+  sqe->user_data = 0;
+  io_uring_sqe_set_flags(sqe, IOSQE_IO_LINK);
+  int ret = io_uring_submit(&uring_);
+  if (ret <= 0) {
+    return Status::IOError("sync: submit");
+  }
+  uring_queue_len_++;
+  return Status::OK();
+}
+
 Status PosixWritableFile::WaitAsync() {
   return WaitQueue(0);
 }
@@ -1242,6 +1263,8 @@ Status PosixWritableFile::Allocate(uint64_t offset, uint64_t len) {
 #endif
 
 Status PosixWritableFile::RangeSync(uint64_t offset, uint64_t nbytes) {
+  return AsyncRangeSync(offset, nbytes);
+  /*
 #ifdef ROCKSDB_RANGESYNC_PRESENT
   assert(offset <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
   assert(nbytes <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
@@ -1266,6 +1289,7 @@ Status PosixWritableFile::RangeSync(uint64_t offset, uint64_t nbytes) {
   }
 #endif  // ROCKSDB_RANGESYNC_PRESENT
   return WritableFile::RangeSync(offset, nbytes);
+  */
 }
 
 #ifdef OS_LINUX

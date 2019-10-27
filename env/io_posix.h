@@ -181,6 +181,7 @@ class PosixWritableFile : public WritableFile {
   Status WaitQueue(int max_len);
   virtual Status AsyncAppend(const Slice& data) override;
   virtual Status AsyncSync() override;
+  Status AsyncRangeSync(uint64_t offset, uint64_t nbytes);
   virtual Status WaitAsync() override;
 
   virtual Status Fsync() override;
